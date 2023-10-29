@@ -1,0 +1,9 @@
+*
+!.gitignore
+!Mux4.v
+!seven_seg.v
+!TSM.v
+!wrapper.v
+!Generic_Counter.v
+!Cmod-A7-Master.xdc
+!README.md
