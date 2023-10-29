@@ -1,2 +1,2 @@
-# CW for DDCA and practice
- Verilog on CMOD-A7
+# Timer
+ CW for DDCA with extra features
