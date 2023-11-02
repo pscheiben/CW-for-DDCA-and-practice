@@ -6,4 +6,6 @@
 !wrapper.v
 !Generic_Counter.v
 !Cmod-A7-Master.xdc
+!Debouncer.v
+!Debouncer_TB.v
 !README.md
