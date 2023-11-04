@@ -8,9 +8,9 @@
 // Module Name: Timer_Wrapper
 // Project Name: CW1 - Timer
 // Target Devices: Digilent CMOD-A7 Artix 7 35T
-// Tool Versions: Vivado 2023.1
+// Tool Versions: Vivado 2023.1 / Visual Studio Code
 // Description: mm.ss format timer, with a function of up and down counting and extra 3 features
-// 
+// Still in progress, but the main function is working
 // Dependencies: 
 // 
 // Revision: Version 1.0
@@ -20,97 +20,123 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module wrapper(CLK, RESET, DIR_IN, ENABLE, SEG_SELECT, DEC_OUT, INDICATOR, RGB_LED //take out ENABLE, put in DIR_IN
+module wrapper(CLK, RESET, DIR_IN, ENABLE, SEG_SELECT, DEC_OUT, INDICATOR, BTNL, BTNR, RGB_LED //ports list
     );
     
-    input CLK, RESET, DIR_IN, ENABLE;
-    output [3:0] SEG_SELECT;
-    output [7:0] DEC_OUT;
-    output INDICATOR; //if the counting is reached the max, this is a carry
-    output [2:0] RGB_LED; // RED = 100, GREEN = 010, BLUE = 001
+    input CLK, RESET, DIR_IN, ENABLE, BTNL, BTNR;   //standard ports for input
+    output [3:0] SEG_SELECT;            // *does not apply! 3 bit long, to able to turn off the upper 4 segment on nexys board
+    output [7:0] DEC_OUT;               
+    output [1:0] INDICATOR;                   //if the counting is reached the max, this is a carry
+    output [2:0] RGB_LED;               //RGB LED output
 
     // CLK Divider 1ms, trigger and counter
-    wire Freq_1kHz_Trigger;
-    wire [16:0]Freq_1kHz_Count;
+    wire Freq_10kHz_Trigger;
+    wire [14:0]Freq_10kHz_Count;
 
     // Seven Segment control and mux control
-    wire [1:0] Bit2CounterControl;
-
+    wire [1:0] Segment_Control;
+    
+    //Dot position, Dot control
+    wire [1:0] Dot_Pos;
+    
     // Different timers counters and triggers, 10ms, 100ms, 1s, 10s, 1min, 10min
-    wire Bit4TriggOutBase, Bit4TriggOut0, Bit4TriggOut1, Bit4TriggOut2, Bit4TriggOut3;
-    wire [4:0] Bit4CountValueDot0, Bit4CountValueDot1, Bit4CountValueDot2, Bit4CountValueDot3, Bit4CountValueDot4, Bit4CountValueDot5;
-    wire [3:0] Bit4CountValue0, Bit4CountValue1, Bit4CountValue2, Bit4CountValue3, Bit4CountValue4, Bit4CountValue5;
+    // lots of wires, for later use
+    wire Counter_1ms_Trig, Counter_10ms_Trig, Counter_100ms_Trig, Counter_1sec_Trig, Counter_10sec_Trig, Counter_1min_Trig, Counter_10min_Trig, Counter_1hour_Trig;
+    wire [4:0] Mux_IN_0, Mux_IN_1, Mux_IN_2, Mux_IN_3;
+    wire [3:0] Counter_1ms_Value, Counter_10ms_Value, Counter_100ms_Value, Counter_1sec_Value, Counter_10sec_Value, Counter_1min_Value, Counter_10min_Value, Counter_1hour_Value;
     
     // Mux for the seven segment
     wire [4:0] Mux4Out;
     
+    //demux for dot
+    wire [3:0]Dot_Demux;
+    
     // Enabler for the counter chain and debouncer output for direction switch
-    wire Enableand, DIR_GOOD;
+    wire Enable_and_Clk, Indicator_Wire, Toggled_Direction, Debounced_Direction;
+    
+    //Timer setting state
+    wire [1:0] Timer_State;
+    // Initializations of the counters for the digital clock, 1ms, 10ms, 100ms, 1s, 10s, 1min, 10min, 1hour are used for later options
+    Generic_Counter #   (.COUNTER_WIDTH(11), .COUNTER_MAX(1199))
+                        Freq_10kHz_Counter (.CLK(CLK), .RESET(1'b0), .ENABLE_IN(1'b1), .DIR(1'b0), .COUNT(Freq_10kHz_Count), .TRIG_OUT(Freq_10kHz_Trigger));
+        
 
-    // Initializations of the counters for the digital clock
-    Generic_Counter #   (.COUNTER_WIDTH(17), .COUNTER_MAX(11999))
-                        Freq_1kHz_Counter (.CLK(CLK), .RESET(1'b0), .ENABLE_IN(1'b1), .DIR(1'b0), .COUNT(Freq_1kHz_Count), .TRIG_OUT(Freq_1kHz_Trigger));
+    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
+                        Counter_1ms (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Enable_and_Clk), .DIR(Debounced_Direction), .COUNT(Counter_1ms_Value), .TRIG_OUT(Counter_1ms_Trig));
+
+    
+    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
+                        Counter_10ms (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_1ms_Trig), .DIR(Debounced_Direction), .COUNT(Counter_10ms_Value), .TRIG_OUT(Counter_10ms_Trig));
+
+    
+    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
+                        Counter_100ms (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_10ms_Trig), .DIR(Debounced_Direction), .COUNT(Counter_100ms_Value), .TRIG_OUT(Counter_100ms_Trig));
 
 
+    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
+                        Counter_1sec (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_100ms_Trig), .DIR(Debounced_Direction), .COUNT(Counter_1sec_Value), .TRIG_OUT(Counter_1sec_Trig));
+
+    
+    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
+                        Counter_10sec (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_1sec_Trig), .DIR(Debounced_Direction), .COUNT(Counter_10sec_Value), .TRIG_OUT(Counter_10sec_Trig));
+
+
+    Generic_Counter #   (.COUNTER_WIDTH(3), .COUNTER_MAX(5))
+                        Counter_1min (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_10sec_Trig), .DIR(Debounced_Direction), .COUNT(Counter_1min_Value), .TRIG_OUT(Counter_1min_Trig));
+
+
+    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
+                        Counter_10min (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_1min_Trig), .DIR(Debounced_Direction), .COUNT(Counter_10min_Value), .TRIG_OUT(Counter_10min_Trig));
+
+    
+    Generic_Counter #   (.COUNTER_WIDTH(3), .COUNTER_MAX(5))
+                        Counter_1hour (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Counter_10min_Trig), .DIR(Debounced_Direction), .COUNT(Counter_1hour_Value), .TRIG_OUT(Counter_1hour_Trig));
+                    
+                    
     Generic_Counter #   (.COUNTER_WIDTH(2), . COUNTER_MAX(3))
-                        Bit2Counter (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Freq_1kHz_Trigger), .DIR(1'b0), .COUNT(Bit2CounterControl));
-    
+                        Segment_Control_Sync (.CLK(CLK), .RESET(1'b0), .ENABLE_IN(Freq_10kHz_Trigger), .DIR(1'b0), .COUNT(Segment_Control));
 
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
-                    Bit4CounterBase (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Enableand), .DIR(DIR_GOOD), .TRIG_OUT(Bit4TriggOutBase));
-
-    
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
-                    Bit4Counter0 (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Bit4TriggOutBase), .DIR(DIR_GOOD), .COUNT(Bit4CountValue0), .TRIG_OUT(Bit4TriggOut0));
-
-    
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
-                    Bit4Counter1 (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Bit4TriggOut0), .DIR(DIR_GOOD), .COUNT(Bit4CountValue1), .TRIG_OUT(Bit4TriggOut1));
-
-
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
-                    Bit4Counter2 (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Bit4TriggOut1), .DIR(DIR_GOOD), .COUNT(Bit4CountValue2), .TRIG_OUT(Bit4TriggOut2));
-
-    
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(5))
-                    Bit4Counter3 (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Bit4TriggOut2), .DIR(DIR_GOOD), .COUNT(Bit4CountValue3), .TRIG_OUT(Bit4TriggOut3));
-
-
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(9))
-                    Bit4Counter4 (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Bit4TriggOut3), .DIR(DIR_GOOD), .COUNT(Bit4CountValue4), .TRIG_OUT(Bit4TriggOut4));
-
-
-    Generic_Counter #   (.COUNTER_WIDTH(4), .COUNTER_MAX(5))
-                    Bit4Counter5 (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Bit4TriggOut4), .DIR(DIR_GOOD), .COUNT(Bit4CountValue5), .TRIG_OUT(Bit4TriggOut5));
-
-    // This is not good, because need for every debouncer. Need to involve in a debounce module
-    // 25 ms for debouncer module, always counting up DIR(1'b0)
-    // Generic_Counter #   (.COUNTER_WIDTH(5), .COUNTER_MAX(24))
-    //                 Freq_40Hz_Counter (.CLK(CLK), .RESET(RESET), .ENABLE_IN(Freq_1kHz_Trigger), .DIR(1'b0), .COUNT(Freq_40Hz_Count), .TRIG_OUT(Freq_40Hz_Trigger));
-
-    // Debouncer for the rotary encoder switch        
-    Debouncer Debouncer_DIR_IN (.CLK(CLK), .RESET(RESET), .DIV_CLK(Freq_1kHz_Trigger), .IN(DIR_IN), .OUT(DIR_GOOD));
 
     // Mux for the seven segment
-    Mux4 Mux4(.CONTROL(Bit2CounterControl), .IN0(Bit4CountValueDot2), .IN1(Bit4CountValueDot3), .IN2(Bit4CountValueDot4), .IN3(Bit4CountValueDot5), .OUT(Mux4Out));
+    Mux4 Segment_Control_Mux(.CONTROL(Segment_Control), .IN0(Mux_IN_0), .IN1(Mux_IN_1), .IN2(Mux_IN_2), .IN3(Mux_IN_3), .OUT(Mux4Out));
+    
+    
+    //DeMux for dot, not working constant is used for now
+    // DotLogic Dot_Control_Logic_2(.CLK(Counter_1ms_Trig), .RESET(RESET), .DIR(Dot_Pos), .OUT(Timer_State));
+    // DeMux4 Dot_Control_Mux(.CONTROL(Timer_State), .OUT(Dot_Demux));
+    assign Dot_Demux = 4'b0100;
+    
+    // Debouncer Rot_Left_Debouncer(.IN(BTNL), .CLK(CLK), .DIV_CLK(Counter_1ms_Trig), .RESET(RESET),  .OUT(Dot_Pos[1]));
+    // Debouncer Rot_Right_Debouncer(.IN(BTNR), .CLK(CLK), .DIV_CLK(Counter_1ms_Trig), .RESET(RESET),  .OUT(Dot_Pos[0]));
+
+
+
 
     // Seven segment display
-    seven_seg seven_seg(.x(Mux4Out[3:0]), .SEG_SELECT_IN(Bit2CounterControl), .dot(Mux4Out[4]), .cat(SEG_SELECT), .seg(DEC_OUT));
+    seven_seg Seven_Seg_Dec(.x(Mux4Out[3:0]), .SEG_SELECT_IN(Segment_Control), .dot(Mux4Out[4]), .cat(SEG_SELECT), .seg(DEC_OUT));
 
-    //feed with a devided clock, otherwise, bouncing occurs. Switch is active low, that is why INPUT(~) logic
-    // TSM Direction (.CLK(CLK), .INPUT(~DIR_GOOD), .RESET(RESET), .TOUT(DIR)); 
 
-    // just an indicator if the counting is reached the max
-    assign INDICATOR = Bit4TriggOut5;
+    // just an indicator trigger every sec
+    TSM Not_so_Useful_Feature(.CLK(CLK), .INPUT(Counter_1sec_Trig), .RESET(RESET), .TOUT(Indicator_Wire));
 
-    // dot place after the second segment
-    assign Bit4CountValueDot2 = {1'b0, Bit4CountValue2};
-    assign Bit4CountValueDot3 = {1'b0, Bit4CountValue3};
-    assign Bit4CountValueDot4 = {1'b1, Bit4CountValue4};
-    assign Bit4CountValueDot5 = {1'b0, Bit4CountValue5};
+    Debouncer Direction_Deboncer(.IN(~DIR_IN), .CLK(CLK), .DIV_CLK(Counter_1ms_Trig), .RESET(RESET),  .OUT(Debounced_Direction));
+
+    // TSM ROT_SW_Toggler(.CLK(CLK), .INPUT(Debounced_Direction), .RESET(RESET), .TOUT(Toggled_Direction));
     
-    assign Enableand = ~ENABLE & Freq_1kHz_Trigger;  //"not" logic because it is a button, now it change from ~ENABLE to 1'b1
-    assign RGB_LED[2:1] = 2'b11; //turn of the RGB leds
-    assign RGB_LED[0] = ~DIR_GOOD;
+
+
+    assign INDICATOR[1] = Debounced_Direction;
+    assign INDICATOR[0] = Indicator_Wire;
+    assign RGB_LED[0] = 1'b1;
+    assign RGB_LED[1] = 1'b1;
+    assign RGB_LED[2] = 1'b1;
+    // dot place after the second segment
+    assign Mux_IN_0 = {Dot_Demux[0], Counter_10sec_Value};
+    assign Mux_IN_1 = {Dot_Demux[1], Counter_1min_Value};
+    assign Mux_IN_2 = {Dot_Demux[2], Counter_10min_Value};
+    assign Mux_IN_3 = {Dot_Demux[3], Counter_1hour_Value};
+    
+    assign Enable_and_Clk = ~ENABLE & Freq_10kHz_Trigger;  //"not" logic because it is a button on the other board CMOD-A7
+
     
 endmodule

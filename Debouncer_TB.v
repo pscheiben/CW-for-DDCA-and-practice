@@ -1,19 +1,19 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
+// Institute: Glasgow Caledonian University 
+// Student: Peter Scheibenhoffer 
 // 
-// Create Date: 31.10.2023 09:57:25
-// Design Name: 
+// Create Date: 29.10.2023 19:06:05
+// Design Name: Verilog-Debouncer Testbench, Behavioral
 // Module Name: Debouncer_TB
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
+// Project Name: Timer CW
+// Target Devices: Nexys 4 DDR Artix-7 FPGA
+// Tool Versions: Vivado 2023.1
+// Description: This module is a debouncer for the buttons and make them as a toggle switch    
 // 
 // Dependencies: 
 // 
-// Revision:
+// Revision: Version 1.3
 // Revision 0.01 - File Created
 // Additional Comments:
 // 
@@ -24,11 +24,9 @@ module Debouncer_TB();
     // module in/out ports
     reg IN, CLK, DIV_CLK, RESET;
     wire OUT;
-    wire [1:0] STATEVAL; 
-    wire [4:0] FREQVAL;
     reg clk; //TestBench clk for simulation
 
-    Debouncer dut(.IN(IN), .CLK(CLK), .DIV_CLK(DIV_CLK), .RESET(RESET), .OUT(OUT), .FREQVAL(FREQVAL), .STATEVAL(STATEVAL), .COUNT_RES(COUNT_RES), .POS_IN(POS_IN));
+    Debouncer dut(.IN(IN), .CLK(CLK), .DIV_CLK(DIV_CLK), .RESET(RESET), .OUT(OUT));
     
     // initialization
     initial begin
